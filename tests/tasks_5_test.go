@@ -89,7 +89,7 @@ func TestTasks(t *testing.T) {
 	})
 	addTask(t, task{
 		date:    date,
-		title:   "Встретится с Васей",
+		title:   "Встретиться с Васей",
 		comment: "в 18:00",
 		repeat:  "",
 	})
