@@ -9,6 +9,12 @@ import (
 )
 
 func tasksHandler(w http.ResponseWriter, r *http.Request) {
+	// Проверяем метод запроса
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
 	search := r.URL.Query().Get("search")
 	search = strings.TrimSpace(search)
 
@@ -18,9 +24,9 @@ func tasksHandler(w http.ResponseWriter, r *http.Request) {
 		// log.Printf("Search query: %q", search)
 	}
 
-	tasks, err := db.TasksWithSearch(50, search)
+	tasks, err := db.TasksWithSearch(db.DefaultTaskLimit, search)
 	if err != nil {
-		writeJSON(w, map[string]any{"error": err.Error()})
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	// Преобразуем в строки согласно требованиям теста

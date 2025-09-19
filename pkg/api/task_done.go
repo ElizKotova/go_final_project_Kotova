@@ -11,23 +11,29 @@ import (
 
 // doneTaskHandler обрабатывает POST /api/task/done
 func doneTaskHandler(w http.ResponseWriter, r *http.Request) {
+	// Проверяем метод запроса
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
 	id := r.URL.Query().Get("id")
 	if strings.TrimSpace(id) == "" {
-		writeJSON(w, map[string]any{"error": "missing id"})
+		writeError(w, http.StatusBadRequest, "missing id")
 		return
 	}
 
 	// Получаем задачу по ID
 	task, err := db.GetTask(id)
 	if err != nil {
-		writeJSON(w, map[string]any{"error": "task not found"})
+		writeError(w, http.StatusNotFound, "task not found")
 		return
 	}
 
 	// Если задача не периодическая (нет repeat), удаляем её
 	if strings.TrimSpace(task.Repeat) == "" {
 		if err := db.DeleteTask(id); err != nil {
-			writeJSON(w, map[string]any{"error": err.Error()})
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		writeJSON(w, map[string]any{})
@@ -38,13 +44,13 @@ func doneTaskHandler(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	nextDate, err := logic.NextDate(now, task.Date, task.Repeat)
 	if err != nil {
-		writeJSON(w, map[string]any{"error": err.Error()})
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// Обновляем дату в базе данных
 	if err := db.UpdateDate(nextDate, id); err != nil {
-		writeJSON(w, map[string]any{"error": err.Error()})
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -53,14 +59,20 @@ func doneTaskHandler(w http.ResponseWriter, r *http.Request) {
 
 // deleteTaskHandler обрабатывает DELETE /api/task
 func deleteTaskHandler(w http.ResponseWriter, r *http.Request) {
+	// Проверяем метод запроса
+	if r.Method != http.MethodDelete {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
 	id := r.URL.Query().Get("id")
 	if strings.TrimSpace(id) == "" {
-		writeJSON(w, map[string]any{"error": "missing id"})
+		writeError(w, http.StatusBadRequest, "missing id")
 		return
 	}
 
 	if err := db.DeleteTask(id); err != nil {
-		writeJSON(w, map[string]any{"error": err.Error()})
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 

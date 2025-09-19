@@ -11,11 +11,6 @@ import (
 	"go_final_project_Kotova/pkg/logic"
 )
 
-func writeJSON(w http.ResponseWriter, data any) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	_ = json.NewEncoder(w).Encode(data)
-}
-
 // afterNow возвращает true, если a > b
 func afterNow(a, b time.Time) bool {
 	ay, am, ad := a.Date()
@@ -93,18 +88,27 @@ func validateAndProcessTask(t *db.Task, isEdit bool) error {
 func addTaskHandler(w http.ResponseWriter, r *http.Request) {
 	var t db.Task
 	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
-		writeJSON(w, map[string]any{"error": err.Error()})
+		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
 
 	if err := validateAndProcessTask(&t, false); err != nil {
-		writeJSON(w, map[string]any{"error": err.Error()})
+		// Определяем код ответа в зависимости от типа ошибки
+		code := http.StatusBadRequest
+		if err.Error() == "internal error: failed to parse today's date" {
+			code = http.StatusInternalServerError
+		}
+		writeError(w, code, err.Error())
 		return
 	}
 
 	id, err := db.AddTask(&t)
 	if err != nil {
-		writeJSON(w, map[string]any{"error": err.Error()})
+		// Определяем код ответа в зависимости от типа ошибки
+		code := http.StatusInternalServerError
+		// Можно добавить дополнительную логику для определения кода ответа
+		// в зависимости от типа ошибки базы данных
+		writeError(w, code, err.Error())
 		return
 	}
 	writeJSON(w, map[string]any{"id": id})

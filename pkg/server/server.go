@@ -21,6 +21,16 @@ func Start() error {
 		return err
 	}
 
+	// Обеспечиваем закрытие соединения с БД при завершении работы
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("Error closing database: %v", err)
+		}
+	}()
+
+	// Инициализируем конфигурацию аутентификации
+	api.InitAuthConfig()
+
 	// Проверяем и создаем пользователя по умолчанию при необходимости
 	if err := createDefaultUser(); err != nil {
 		return err

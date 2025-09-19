@@ -1,10 +1,14 @@
 package db
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
 )
+
+// DefaultTaskLimit это значение лимита задач по умолчанию
+const DefaultTaskLimit = 50
 
 // Task описывает задачу в планировщике
 type Task struct {
@@ -28,7 +32,7 @@ func AddTask(task *Task) (int64, error) {
 // Tasks возвращает список задач, отсортированных по дате по возрастанию, ограниченных limit
 func Tasks(limit int) ([]*Task, error) {
 	if limit <= 0 {
-		limit = 50
+		limit = DefaultTaskLimit
 	}
 	const query = `SELECT id, date, title, comment, repeat FROM scheduler ORDER BY date ASC, id ASC LIMIT ?`
 	rows, err := DB.Query(query, limit)
@@ -45,16 +49,22 @@ func Tasks(limit int) ([]*Task, error) {
 		}
 		tasks = append(tasks, t)
 	}
+
+	// Проверяем ошибки, которые могли возникнуть при итерации по строкам
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
 	if tasks == nil {
 		tasks = make([]*Task, 0)
 	}
-	return tasks, rows.Err()
+	return tasks, nil
 }
 
 // TasksWithSearch возвращает список задач с поиском, отсортированных по дате по возрастанию
 func TasksWithSearch(limit int, search string) ([]*Task, error) {
 	if limit <= 0 {
-		limit = 50
+		limit = DefaultTaskLimit
 	}
 
 	// Если поиск не указан, возвращаем все задачи
@@ -81,10 +91,16 @@ func TasksWithSearch(limit int, search string) ([]*Task, error) {
 			}
 			tasks = append(tasks, t)
 		}
+
+		// Проверяем ошибки, которые могли возникнуть при итерации по строкам
+		if err = rows.Err(); err != nil {
+			return nil, err
+		}
+
 		if tasks == nil {
 			tasks = make([]*Task, 0)
 		}
-		return tasks, rows.Err()
+		return tasks, nil
 	}
 
 	// Поиск по заголовку или комментарию (регистронезависимо в Go)
@@ -118,7 +134,12 @@ func TasksWithSearch(limit int, search string) ([]*Task, error) {
 func GetTask(id string) (*Task, error) {
 	const query = `SELECT id, date, title, comment, repeat FROM scheduler WHERE id = ?`
 	t := new(Task)
-	if err := DB.QueryRow(query, id).Scan(&t.ID, &t.Date, &t.Title, &t.Comment, &t.Repeat); err != nil {
+	err := DB.QueryRow(query, id).Scan(&t.ID, &t.Date, &t.Title, &t.Comment, &t.Repeat)
+	if err != nil {
+		// Если задача не найдена, возвращаем специальную ошибку
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("task not found")
+		}
 		return nil, err
 	}
 	return t, nil

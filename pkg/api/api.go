@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -9,9 +10,28 @@ import (
 
 const dateLayout = "20060102"
 
+// writeJSON отправляет JSON-ответ
+func writeJSON(w http.ResponseWriter, data any) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	_ = json.NewEncoder(w).Encode(data)
+}
+
+// writeError отправляет JSON-ответ с ошибкой и устанавливает соответствующий HTTP код ответа
+func writeError(w http.ResponseWriter, code int, message string) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(map[string]any{"error": message})
+}
+
 // RegisterRoutes регистрирует API-эндпоинты на mux.
 func RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/nextdate", func(w http.ResponseWriter, r *http.Request) {
+		// Проверяем метод запроса
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+
 		nowStr := r.FormValue("now")
 		dateStr := r.FormValue("date")
 		repeat := r.FormValue("repeat")
@@ -50,13 +70,13 @@ func RegisterRoutes(mux *http.ServeMux) {
 		case http.MethodDelete:
 			requireAuth(deleteTaskHandler)(w, r)
 		default:
-			writeJSON(w, map[string]any{"error": "method not allowed"})
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
 	})
 
 	mux.HandleFunc("/api/task/done", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			writeJSON(w, map[string]any{"error": "method not allowed"})
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		requireAuth(doneTaskHandler)(w, r)
@@ -64,7 +84,7 @@ func RegisterRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("/api/tasks", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
-			writeJSON(w, map[string]any{"error": "method not allowed"})
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		requireAuth(tasksHandler)(w, r)

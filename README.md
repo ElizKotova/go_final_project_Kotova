@@ -52,28 +52,28 @@
 
 - `TODO_PORT` - порт для запуска сервера (по умолчанию 7540)
 - `TODO_DBFILE` - путь к файлу базы данных (по умолчанию scheduler.db)
-- `TODO_PASSWORD` - пароль для аутентификации (если не задан, используется пароль по умолчанию "user")
-- `JWT_SECRET` - секрет для подписи JWT токенов (по умолчанию "default_secret")
+- `TODO_PASSWORD` - пароль для аутентификации (по умолчанию "12345")
+- `TODO_JWT_SECRET` - секрет для подписи JWT токенов (по умолчанию "secret")
 
 ### Пример запуска с аутентификацией
 
 В Windows (Git Bash):
 ```
 export TODO_PASSWORD=12345
-export JWT_SECRET=my_secret_key
+export TODO_JWT_SECRET=my_secret_key
 go run main.go
 ```
 
 В Windows (Command Prompt):
 ```
 set TODO_PASSWORD=12345
-set JWT_SECRET=my_secret_key
+set TODO_JWT_SECRET=my_secret_key
 go run main.go
 ```
 
 В Linux/macOS:
 ```
-TODO_PASSWORD=12345 JWT_SECRET=my_secret_key go run main.go
+TODO_PASSWORD=12345 TODO_JWT_SECRET=my_secret_key go run main.go
 ```
 
 Пример файла .env:
@@ -81,7 +81,7 @@ TODO_PASSWORD=12345 JWT_SECRET=my_secret_key go run main.go
 TODO_PORT=7540
 TODO_DBFILE=scheduler.db
 TODO_PASSWORD=12345
-JWT_SECRET=my_secret_key
+TODO_JWT_SECRET=my_secret_key
 ```
 
 ## Инструкция по запуску тестов
@@ -100,6 +100,20 @@ JWT_SECRET=my_secret_key
 
 Также можно запустить все тесты одной командой:
 ```
+go test ./tests/... -v
+```
+
+### Запуск тестов с аутентификацией
+
+Для запуска тестов с включенной аутентификацией используйте скрипт:
+```
+./run_tests_with_auth.sh
+```
+
+Или вручную установите переменные окружения:
+```
+export TODO_PASSWORD=12345
+export TODO_JWT_SECRET=secret
 go test ./tests/... -v
 ```
 
@@ -129,14 +143,14 @@ docker run -d -p 7540:7540 -v $(pwd)/scheduler.db:/root/scheduler.db --name todo
 
 С аутентификацией:
 ```
-docker run -d -p 7540:7540 -e TODO_PASSWORD=12345 -e JWT_SECRET=my_secret_key -v $(pwd)/scheduler.db:/root/scheduler.db --name todo-scheduler todo-scheduler
+docker run -d -p 7540:7540 -e TODO_PASSWORD=12345 -e TODO_JWT_SECRET=my_secret_key -v $(pwd)/scheduler.db:/root/scheduler.db --name todo-scheduler todo-scheduler
 ```
 
 ### Переменные окружения в Docker
 
 - `-e TODO_PORT=7540` - порт сервера
 - `-e TODO_PASSWORD=12345` - пароль для аутентификации
-- `-e JWT_SECRET=my_secret_key` - секрет для JWT токенов
+- `-e TODO_JWT_SECRET=my_secret_key` - секрет для JWT токенов
 - `-v $(pwd)/scheduler.db:/root/scheduler.db` - монтирование файла базы данных
 
 После запуска контейнера откройте в браузере: http://localhost:7540

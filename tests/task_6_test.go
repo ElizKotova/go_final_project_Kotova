@@ -12,6 +12,9 @@ import (
 )
 
 func TestTask(t *testing.T) {
+	// Включаем аутентификацию для теста
+	EnableAuth()
+
 	db := openDB(t)
 	defer db.Close()
 
@@ -54,6 +57,9 @@ type fulltask struct {
 }
 
 func TestEditTask(t *testing.T) {
+	// Включаем аутентификацию для теста
+	EnableAuth()
+
 	db := openDB(t)
 	defer db.Close()
 

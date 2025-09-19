@@ -12,14 +12,20 @@ import (
 )
 
 func getTaskHandler(w http.ResponseWriter, r *http.Request) {
+	// Проверяем метод запроса
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
 	id := r.URL.Query().Get("id")
 	if strings.TrimSpace(id) == "" {
-		writeJSON(w, map[string]any{"error": "missing id"})
+		writeError(w, http.StatusBadRequest, "missing id")
 		return
 	}
 	t, err := db.GetTask(id)
 	if err != nil {
-		writeJSON(w, map[string]any{"error": "task not found"})
+		writeError(w, http.StatusNotFound, "task not found")
 		return
 	}
 	writeJSON(w, map[string]string{
@@ -32,6 +38,12 @@ func getTaskHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func editTaskHandler(w http.ResponseWriter, r *http.Request) {
+	// Проверяем метод запроса
+	if r.Method != http.MethodPut {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
 	// Универсальная структура для принятия JSON с ID как string или number
 	var reqData struct {
 		ID      interface{} `json:"id"` // Принимаем и строку и число
@@ -41,7 +53,7 @@ func editTaskHandler(w http.ResponseWriter, r *http.Request) {
 		Repeat  string      `json:"repeat"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&reqData); err != nil {
-		writeJSON(w, map[string]any{"error": err.Error()})
+		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
 
@@ -55,19 +67,19 @@ func editTaskHandler(w http.ResponseWriter, r *http.Request) {
 	case int:
 		idStr = fmt.Sprintf("%d", v)
 	default:
-		writeJSON(w, map[string]any{"error": "invalid id type"})
+		writeError(w, http.StatusBadRequest, "invalid id type")
 		return
 	}
 
 	if strings.TrimSpace(idStr) == "" {
-		writeJSON(w, map[string]any{"error": "missing id"})
+		writeError(w, http.StatusBadRequest, "missing id")
 		return
 	}
 
 	// Парсим ID из строки
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		writeJSON(w, map[string]any{"error": "invalid id"})
+		writeError(w, http.StatusBadRequest, "invalid id")
 		return
 	}
 	// Создаем структуру Task с правильным типом ID
@@ -81,12 +93,17 @@ func editTaskHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Валидируем и обрабатываем задачу
 	if err := validateAndProcessTask(&t, true); err != nil {
-		writeJSON(w, map[string]any{"error": err.Error()})
+		// Определяем код ответа в зависимости от типа ошибки
+		code := http.StatusBadRequest
+		if err.Error() == "internal error: failed to parse today's date" {
+			code = http.StatusInternalServerError
+		}
+		writeError(w, code, err.Error())
 		return
 	}
 
 	if err := db.UpdateTask(&t); err != nil {
-		writeJSON(w, map[string]any{"error": fmt.Sprint(err)})
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	fmt.Printf("Successfully updated task ID %d: %+v\n", t.ID, t)

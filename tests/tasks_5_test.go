@@ -11,6 +11,9 @@ import (
 )
 
 func addTask(t *testing.T, task task) string {
+	// Включаем аутентификацию перед выполнением запроса
+	EnableAuth()
+
 	ret, err := postJSON("api/task", map[string]any{
 		"date":    task.date,
 		"title":   task.title,
@@ -25,6 +28,9 @@ func addTask(t *testing.T, task task) string {
 }
 
 func getTasks(t *testing.T, search string) []map[string]string {
+	// Включаем аутентификацию перед выполнением запроса
+	EnableAuth()
+
 	url := "api/tasks"
 	if Search {
 		url += "?search=" + search
@@ -39,6 +45,9 @@ func getTasks(t *testing.T, search string) []map[string]string {
 }
 
 func TestTasks(t *testing.T) {
+	// Включаем аутентификацию для теста
+	EnableAuth()
+
 	db := openDB(t)
 	defer db.Close()
 

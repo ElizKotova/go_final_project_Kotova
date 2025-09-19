@@ -12,6 +12,45 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// AuthConfig хранит конфигурацию аутентификации
+type AuthConfig struct {
+	Password     string
+	PasswordHash string
+	JWTSecret    string
+}
+
+// GlobalAuthConfig глобальная конфигурация аутентификации
+var GlobalAuthConfig *AuthConfig
+
+// InitAuthConfig инициализирует конфигурацию аутентификации при запуске приложения
+// Считывает переменные окружения TODO_PASSWORD и TODO_JWT_SECRET один раз при запуске
+// и сохраняет их в глобальной переменной GlobalAuthConfig для последующего использования
+func InitAuthConfig() {
+	password := os.Getenv("TODO_PASSWORD")
+	jwtSecret := os.Getenv("TODO_JWT_SECRET")
+
+	// Если пароль не установлен, аутентификация отключена
+	if password == "" {
+		GlobalAuthConfig = nil
+		return
+	}
+
+	// Если секрет не установлен, используем значение по умолчанию
+	if jwtSecret == "" {
+		jwtSecret = "secret"
+	}
+
+	// Создаем хэш пароля
+	hash := sha256.Sum256([]byte(password))
+	passwordHash := hex.EncodeToString(hash[:])
+
+	GlobalAuthConfig = &AuthConfig{
+		Password:     password,
+		PasswordHash: passwordHash,
+		JWTSecret:    jwtSecret,
+	}
+}
+
 // User представляет пользователя системы
 type User struct {
 	ID       int64  `json:"id" db:"id"`
@@ -28,7 +67,7 @@ type Claims struct {
 // signinHandler обрабатывает POST /api/signin
 func signinHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSON(w, map[string]any{"error": "method not allowed"})
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -37,40 +76,33 @@ func signinHandler(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&credentials); err != nil {
-		writeJSON(w, map[string]any{"error": "invalid JSON"})
+		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
 
 	// Проверяем, что пароль не пустой
 	credentials.Password = credentials.Password
 	if credentials.Password == "" {
-		writeJSON(w, map[string]any{"error": "password is required"})
+		writeError(w, http.StatusBadRequest, "password is required")
 		return
 	}
 
 	// Проверяем длину пароля (не более 255 символов)
 	if len(credentials.Password) > 255 {
-		writeJSON(w, map[string]any{"error": "password is too long"})
-		return
-	}
-
-	// Получаем пароль из переменной окружения
-	expectedPassword := os.Getenv("TODO_PASSWORD")
-	if expectedPassword == "" {
-		writeJSON(w, map[string]any{"error": "authentication not configured"})
+		writeError(w, http.StatusBadRequest, "password is too long")
 		return
 	}
 
 	// Проверяем учетные данные
-	if credentials.Password != expectedPassword {
-		writeJSON(w, map[string]any{"error": "Неверный пароль"})
+	if GlobalAuthConfig == nil || credentials.Password != GlobalAuthConfig.Password {
+		writeError(w, http.StatusUnauthorized, "Неверный пароль")
 		return
 	}
 
 	// Генерируем JWT-токен
-	tokenString, err := generateJWTToken(expectedPassword)
+	tokenString, err := generateJWTToken(credentials.Password)
 	if err != nil {
-		writeJSON(w, map[string]any{"error": "internal server error"})
+		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
@@ -98,14 +130,8 @@ func generateJWTToken(password string) (string, error) {
 	// Создаем токен
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
-	// Получаем секрет из переменной окружения или используем значение по умолчанию
-	jwtSecret := os.Getenv("TODO_JWT_SECRET")
-	if jwtSecret == "" {
-		jwtSecret = "secret" // Значение по умолчанию для обратной совместимости
-	}
-
 	// Подписываем токен
-	tokenString, err := token.SignedString([]byte(jwtSecret))
+	tokenString, err := token.SignedString([]byte(GlobalAuthConfig.JWTSecret))
 	if err != nil {
 		return "", err
 	}
@@ -114,21 +140,11 @@ func generateJWTToken(password string) (string, error) {
 }
 
 // authenticate проверяет JWT-токен
+// Конфигурация аутентификации считывается на старте приложения в InitAuthConfig()
 func authenticate(tokenString string) bool {
-	// Получаем пароль из переменной окружения
-	expectedPassword := os.Getenv("TODO_PASSWORD")
-	if expectedPassword == "" {
+	// Проверяем, что аутентификация включена
+	if GlobalAuthConfig == nil {
 		return false
-	}
-
-	// Создаем хэш ожидаемого пароля
-	hash := sha256.Sum256([]byte(expectedPassword))
-	expectedPasswordHash := hex.EncodeToString(hash[:])
-
-	// Получаем секрет из переменной окружения или используем значение по умолчанию
-	jwtSecret := os.Getenv("TODO_JWT_SECRET")
-	if jwtSecret == "" {
-		jwtSecret = "secret" // Значение по умолчанию для обратной совместимости
 	}
 
 	// Парсим токен
@@ -138,7 +154,7 @@ func authenticate(tokenString string) bool {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return []byte(jwtSecret), nil
+		return []byte(GlobalAuthConfig.JWTSecret), nil
 	})
 
 	// Проверяем валидность токена и соответствие хэша пароля
@@ -147,7 +163,7 @@ func authenticate(tokenString string) bool {
 	}
 
 	// Проверяем, что хэш пароля в токене соответствует ожидаемому хэшу
-	if claims.PasswordHash != expectedPasswordHash {
+	if claims.PasswordHash != GlobalAuthConfig.PasswordHash {
 		return false
 	}
 
@@ -157,10 +173,9 @@ func authenticate(tokenString string) bool {
 // requireAuth оборачивает обработчик и проверяет аутентификацию
 func requireAuth(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Проверяем, установлен ли пароль в переменной окружения
-		pass := os.Getenv("TODO_PASSWORD")
-		if len(pass) == 0 {
-			// Если пароль не установлен, пропускаем аутентификацию
+		// Проверяем, включена ли аутентификация
+		if GlobalAuthConfig == nil {
+			// Если аутентификация не включена, пропускаем аутентификацию
 			handler(w, r)
 			return
 		}
@@ -186,7 +201,7 @@ func requireAuth(handler http.HandlerFunc) http.HandlerFunc {
 // logoutHandler обрабатывает POST /api/logout
 func logoutHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSON(w, map[string]any{"error": "method not allowed"})
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
