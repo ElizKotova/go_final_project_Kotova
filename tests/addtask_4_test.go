@@ -82,6 +82,9 @@ type task struct {
 }
 
 func TestAddTask(t *testing.T) {
+	// Включаем аутентификацию для теста
+	EnableAuth()
+
 	db := openDB(t)
 	defer db.Close()
 
